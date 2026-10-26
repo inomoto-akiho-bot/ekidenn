@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>駅伝・長距離走 200mラップ計測アプリ</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* タッチ操作時のハイライト抑制と押しやすさ向上 */
+        button {
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        /* スクロールバーのカスタマイズ */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col">
+
+    <!-- ヘッダー -->
+    <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i data-lucide="timer" class="w-7 h-7"></i>
+                <h1 class="text-xl md:text-2xl font-bold tracking-wide">駅伝ラップ計測 (200m×5周)</h1>
+            </div>
+            <div class="flex gap-2">
+                <button id="btn-toggle-names" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-3 py-1.5 rounded-lg flex items-center gap-1 border border-indigo-400 transition">
+                    <i data-lucide="users" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">選手名編集</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 flex flex-col gap-4">
+
+        <!-- コントロールパネル & 全体タイマー -->
+        <div class="bg-white rounded-xl shadow-md p-4 flex flex-col md:flex-row items-center justify-between gap-4 border border-slate-200">
+            <!-- 全体タイム表示 -->
+            <div class="text-center md:text-left">
+                <span class="text-xs text-slate-500 font-semibold tracking-wider uppercase block">全体経過時間</span>
+                <div id="main-timer" class="text-4xl sm:text-5xl font-mono font-bold text-slate-900 tracking-tight">
+                    00:00.00
+                </div>
+            </div>
+
+            <!-- 操作ボタン群 -->
+            <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 w-full md:w-auto">
+                <button id="btn-start" class="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-lg">
+                    <i data-lucide="play" class="w-6 h-6 fill-current"></i>
+                    <span>一斉スタート</span>
+                </button>
+                <button id="btn-stop" class="flex-1 md:flex-none bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-bold px-5 py-3 rounded-xl shadow transition hidden flex items-center justify-center gap-2 text-lg">
+                    <i data-lucide="pause" class="w-6 h-6 fill-current"></i>
+                    <span>一時停止</span>
+                </button>
+                <button id="btn-undo" class="bg-slate-200 hover:bg-slate-300 active:bg-slate-400 text-slate-700 font-semibold px-4 py-3 rounded-xl transition flex items-center justify-center gap-1 border border-slate-300" title="直前のタップを取り消し" disabled>
+                    <i data-lucide="undo-2" class="w-5 h-5"></i>
+                    <span class="text-sm">取り消し</span>
+                </button>
+                <button id="btn-reset" class="bg-rose-100 hover:bg-rose-200 active:bg-rose-300 text-rose-700 font-semibold px-4 py-3 rounded-xl transition flex items-center justify-center gap-1 border border-rose-200">
+                    <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+                    <span class="text-sm">リセット</span>
+                </button>
+                <button id="btn-export" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-3 rounded-xl transition flex items-center justify-center gap-1 border border-slate-300" title="CSVダウンロード">
+                    <i data-lucide="download" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 選手一覧・タップエリア (15名) -->
+        <div id="runner-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+            <!-- JSで15人分を動的生成 -->
+        </div>
+
+    </main>
+
+    <!-- Modal: 選手名設定 -->
+    <div id="modal-names" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="p-4 bg-indigo-700 text-white flex justify-between items-center">
+                <h3 class="text-lg font-bold flex items-center gap-2">
+                    <i data-lucide="user-cog" class="w-5 h-5"></i>
+                    選手名登録 (15名)
+                </h3>
+                <button id="btn-close-modal" class="text-white/80 hover:text-white p-1">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <div class="p-4 overflow-y-auto flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3" id="name-inputs-container">
+                <!-- 選手名入力欄が生成される -->
+            </div>
+            <div class="p-4 border-t border-slate-200 flex justify-end gap-2 bg-slate-50">
+                <button id="btn-save-names" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded-xl shadow transition">
+                    保存して閉じる
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- メッセージ通知 (トースト) -->
+    <div id="toast" class="fixed bottom-4 right-4 bg-slate-800 text-white px-4 py-3 rounded-xl shadow-xl transition-all duration-300 transform translate-y-10 opacity-0 pointer-events-none z-50 flex items-center gap-2 text-sm">
+        <i data-lucide="info" class="w-4 h-4 text-indigo-400"></i>
+        <span id="toast-message">メッセージ</span>
+    </div>
+
+    <script>
+        // --- 定数・初期状態 ---
+        const TOTAL_RUNNERS = 15;
+        const TARGET_LAPS = 5; // 200m × 5周 = 1000m
+
+        // デフォルト選手名
+        const defaultNames = Array.from({ length: TOTAL_RUNNERS }, (_, i) => `選手 ${i + 1}`);
+
+        // ローカルストレージから名前を取得
+        let runnerNames = JSON.parse(localStorage.getItem('ekiden_runner_names')) || defaultNames;
+
+        // タイマー状態
+        let startTime = 0;
+        let elapsedTime = 0;
+        let timerInterval = null;
+        let isRunning = false;
+
+        // 各選手のラップ記録データ
+        // 構造: { id: 0, name: '名前', laps: [ ms1, ms2, ... ], finished: false }
+        let runnersData = [];
+
+        // 操作履歴 (Undo用)
+        // 構造: { runnerId: number, lapTime: number }
+        let actionHistory = [];
+
+        // --- 初期化処理 ---
+        function initData() {
+            runnersData = runnerNames.map((name, index) => ({
+                id: index,
+                name: name,
+                laps: [], // 各通過時点のミリ秒タイムスタンプ（一斉スタートからの経過時間）
+                finished: false
+            }));
+            actionHistory = [];
+        }
+
+        // --- UI構築 ---
+        function renderRunners() {
+            const grid = document.getElementById('runner-grid');
+            grid.innerHTML = '';
+
+            runnersData.forEach(runner => {
+                const currentLapCount = runner.laps.length;
+                const isFinished = runner.finished;
+                const distance = currentLapCount * 200;
+
+                // 最新のラップタイム計算
+                let lastLapText = '-';
+                if (currentLapCount > 0) {
+                    const prevTime = currentLapCount === 1 ? 0 : runner.laps[currentLapCount - 2];
+                    const lapDiff = runner.laps[currentLapCount - 1] - prevTime;
+                    lastLapText = formatLapTime(lapDiff);
+                }
+
+                // トータルタイム
+                const totalTimeText = currentLapCount > 0 
+                    ? formatTime(runner.laps[currentLapCount - 1])
+                    : '00:00.00';
+
+                // カード要素作成
+                const card = document.createElement('div');
+                card.className = `rounded-2xl border transition-all duration-200 flex flex-col justify-between overflow-hidden shadow-sm ${
+                    isFinished 
+                        ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-400' 
+                        : currentLapCount > 0 
+                            ? 'bg-white border-indigo-200' 
+                            : 'bg-white border-slate-200'
+                }`;
+
+                // ラップ履歴の表示作成
+                let lapBadgeListHtml = '';
+                for (let i = 0; i < TARGET_LAPS; i++) {
+                    if (i < currentLapCount) {
+                        const pTime = i === 0 ? 0 : runner.laps[i - 1];
+                        const lDiff = runner.laps[i] - pTime;
+                        lapBadgeListHtml += `
+                            <div class="flex justify-between items-center text-xs py-0.5 border-b border-slate-100 last:border-0">
+                                <span class="text-slate-400">${(i + 1) * 200}m</span>
+                                <span class="font-mono font-medium text-slate-700">${formatLapTime(lDiff)}</span>
+                            </div>`;
+                    } else {
+                        lapBadgeListHtml += `
+                            <div class="flex justify-between items-center text-xs py-0.5 border-b border-slate-100 last:border-0 opacity-40">
+                                <span class="text-slate-400">${(i + 1) * 200}m</span>
+                                <span class="font-mono text-slate-400">--:--.--</span>
+                            </div>`;
+                    }
+                }
+
+                card.innerHTML = `
+                    <!-- ヘッダー (名前 & 距離) -->
+                    <div class="p-3 bg-slate-50/80 border-b border-slate-100 flex justify-between items-center">
+                        <div class="flex items-center gap-1.5 overflow-hidden">
+                            <span class="text-xs font-bold w-5 h-5 rounded-full ${isFinished ? 'bg-emerald-600' : 'bg-slate-700'} text-white flex items-center justify-center shrink-0">
+                                ${runner.id + 1}
+                            </span>
+                            <span class="font-bold text-slate-800 truncate text-sm sm:text-base">${escapeHtml(runner.name)}</span>
+                        </div>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            isFinished ? 'bg-emerald-200 text-emerald-800' : 'bg-indigo-100 text-indigo-700'
+                        }">
+                            ${isFinished ? 'GOAL 1000m' : `${distance}m / 1000m`}
+                        </span>
+                    </div>
+
+                    <!-- メインラップ情報 -->
+                    <div class="p-3 flex-1 flex flex-col justify-center">
+                        <div class="flex justify-between items-end mb-2">
+                            <div>
+                                <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">前周ラップ(200m)</span>
+                                <span class="text-xl font-mono font-bold ${isFinished ? 'text-emerald-700' : 'text-indigo-600'}">
+                                    ${lastLapText}
+                                </span>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">累積タイム</span>
+                                <span class="text-sm font-mono font-semibold text-slate-600">
+                                    ${totalTimeText}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- 各周の細かな履歴 (アコーディオン風) -->
+                        <div class="bg-slate-50/50 rounded-lg p-2 border border-slate-100 space-y-0.5">
+                            ${lapBadgeListHtml}
+                        </div>
+                    </div>
+
+                    <!-- タップエリア (ボタン) -->
+                    <div class="p-2 bg-slate-50 border-t border-slate-100 flex gap-1.5">
+                        <button 
+                            onclick="recordLap(${runner.id})"
+                            ${isFinished || !isRunning ? 'disabled' : ''}
+                            class="flex-1 py-3 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm ${
+                                isFinished 
+                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                                    : !isRunning
+                                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                        : 'bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white shadow-indigo-200'
+                            }"
+                        >
+                            <i data-lucide="${isFinished ? 'check-circle-2' : 'flag'}" class="w-5 h-5 shrink-0"></i>
+                            <span class="truncate">${isFinished ? 'ゴール完了' : `通過 (${distance + 200}m)`}</span>
+                        </button>
+                        <button 
+                            onclick="undoRunnerLap(${runner.id})"
+                            ${currentLapCount === 0 ? 'disabled' : ''}
+                            class="px-2.5 py-3 rounded-xl font-semibold border transition-all flex items-center justify-center shrink-0 ${
+                                currentLapCount === 0
+                                    ? 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed'
+                                    : 'bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-200 active:scale-95'
+                            }"
+                            title="この選手の直前タップを取り消す"
+                        >
+                            <i data-lucide="undo-2" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                `;
+
+                grid.appendChild(card);
+            });
+
+            // アイコン再描画
+            lucide.createIcons();
+
+            // Undoボタンの状態更新
+            document.getElementById('btn-undo').disabled = actionHistory.length === 0;
+        }
+
+        // --- タイマー処理 ---
+        function updateTimer() {
+            const now = Date.now();
+            elapsedTime = now - startTime;
+            document.getElementById('main-timer').textContent = formatTime(elapsedTime);
+        }
+
+        function startTimer() {
+            if (isRunning) return;
+            isRunning = true;
+            startTime = Date.now() - elapsedTime;
+            timerInterval = setInterval(updateTimer, 10);
+
+            // ボタン表示切り替え
+            document.getElementById('btn-start').classList.add('hidden');
+            document.getElementById('btn-stop').classList.remove('hidden');
+
+            showToast("計測を開始しました");
+            renderRunners();
+        }
+
+        function stopTimer() {
+            if (!isRunning) return;
+            isRunning = false;
+            clearInterval(timerInterval);
+
+            // ボタン表示切り替え
+            document.getElementById('btn-start').classList.remove('hidden');
+            document.getElementById('btn-stop').classList.add('hidden');
+
+            showToast("一時停止しました");
+            renderRunners();
+        }
+
+        function resetTimer() {
+            if (confirm("全ての記録をリセットしますか？")) {
+                isRunning = false;
+                clearInterval(timerInterval);
+                elapsedTime = 0;
+                document.getElementById('main-timer').textContent = "00:00.00";
+
+                document.getElementById('btn-start').classList.remove('hidden');
+                document.getElementById('btn-stop').classList.add('hidden');
+
+                initData();
+                renderRunners();
+                showToast("リセットしました");
+            }
+        }
+
+        // --- ラップ計測処理 ---
+        window.recordLap = function(runnerId) {
+            if (!isRunning) return;
+
+            const runner = runnersData[runnerId];
+            if (runner.finished) return;
+
+            const currentLapTimestamp = elapsedTime;
+            runner.laps.push(currentLapTimestamp);
+
+            // 5周到達でゴール
+            if (runner.laps.length >= TARGET_LAPS) {
+                runner.finished = true;
+                showToast(`${runner.name} がゴールしました！`);
+            }
+
+            // Undo用に履歴保持
+            actionHistory.push({
+                runnerId: runnerId,
+                timestamp: currentLapTimestamp
+            });
+
+            renderRunners();
+        };
+
+        // --- 選手ごとの誤タップ取り消し ---
+        window.undoRunnerLap = function(runnerId) {
+            const runner = runnersData[runnerId];
+            if (!runner || runner.laps.length === 0) return;
+
+            // 該当選手の最新ラップを削除
+            runner.laps.pop();
+            runner.finished = false; // ゴール状態を解除
+
+            // 全体履歴からもこの選手の最新アクションを削除
+            for (let i = actionHistory.length - 1; i >= 0; i--) {
+                if (actionHistory[i].runnerId === runnerId) {
+                    actionHistory.splice(i, 1);
+                    break;
+                }
+            }
+
+            renderRunners();
+            showToast(`${runner.name} の直前のラップを取り消しました`);
+        };
+
+        // --- 誤タップ取り消し (Undo: 全体履歴の最後を取り消し) ---
+        function undoLastLap() {
+            if (actionHistory.length === 0) return;
+
+            const lastAction = actionHistory.pop();
+            const runner = runnersData[lastAction.runnerId];
+
+            if (runner && runner.laps.length > 0) {
+                runner.laps.pop();
+                runner.finished = false; // ゴール状態を解除
+                renderRunners();
+                showToast(`${runner.name} の直前のラップを取り消しました`);
+            }
+        }
+
+        // --- 選手名設定モーダル ---
+        function openNamesModal() {
+            const container = document.getElementById('name-inputs-container');
+            container.innerHTML = '';
+
+            runnerNames.forEach((name, index) => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200';
+                item.innerHTML = `
+                    <span class="text-xs font-bold w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                        ${index + 1}
+                    </span>
+                    <input type="text" data-index="${index}" value="${escapeHtml(name)}" class="name-input flex-1 px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="選手名を入力">
+                `;
+                container.appendChild(item);
+            });
+
+            document.getElementById('modal-names').classList.remove('hidden');
+        }
+
+        function closeNamesModal() {
+            document.getElementById('modal-names').classList.add('hidden');
+        }
+
+        function saveNames() {
+            const inputs = document.querySelectorAll('.name-input');
+            inputs.forEach(input => {
+                const idx = parseInt(input.getAttribute('data-index'), 10);
+                const val = input.value.trim() || `選手 ${idx + 1}`;
+                runnerNames[idx] = val;
+                runnersData[idx].name = val;
+            });
+
+            localStorage.setItem('ekiden_runner_names', JSON.stringify(runnerNames));
+            closeNamesModal();
+            renderRunners();
+            showToast("選手名を保存しました");
+        }
+
+        // --- CSVエクスポート ---
+        function exportCSV() {
+            let csv = "\uFEFF"; // UTF-8 BOM
+            csv += "ゼッケン,名前,200m,400m,600m,800m,1000m(ゴールタイム)\n";
+
+            runnersData.forEach(r => {
+                let line = `${r.id + 1},"${r.name.replace(/"/g, '""')}"`;
+                for (let i = 0; i < TARGET_LAPS; i++) {
+                    if (i < r.laps.length) {
+                        line += `,${formatTime(r.laps[i])}`;
+                    } else {
+                        line += `,`;
+                    }
+                }
+                csv += line + "\n";
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `ekiden_lap_result_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // --- フォーマット補助関数 ---
+        // mm:ss.ms (メインタイマー・累積用)
+        function formatTime(ms) {
+            const minutes = Math.floor(ms / 60000);
+            const seconds = Math.floor((ms % 60000) / 1000);
+            const centiseconds = Math.floor((ms % 1000) / 10);
+
+            const m = String(minutes).padStart(2, '0');
+            const s = String(seconds).padStart(2, '0');
+            const cs = String(centiseconds).padStart(2, '0');
+
+            return `${m}:${s}.${cs}`;
+        }
+
+        // 区間ラップタイム用 (例: 35.42秒 形式)
+        function formatLapTime(ms) {
+            if (ms < 0) return '00.00';
+            const seconds = Math.floor(ms / 1000);
+            const centiseconds = Math.floor((ms % 1000) / 10);
+
+            const s = String(seconds).padStart(2, '0');
+            const cs = String(centiseconds).padStart(2, '0');
+
+            return `${s}.${cs}`;
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/[&<>"']/g, function(m) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+            });
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-message');
+            toastMsg.textContent = msg;
+            toast.classList.remove('translate-y-10', 'opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0', 'pointer-events-none');
+            }, 2500);
+        }
+
+        // --- イベントリスナー設定 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initData();
+            renderRunners();
+
+            document.getElementById('btn-start').addEventListener('click', startTimer);
+            document.getElementById('btn-stop').addEventListener('click', stopTimer);
+            document.getElementById('btn-reset').addEventListener('click', resetTimer);
+            document.getElementById('btn-undo').addEventListener('click', undoLastLap);
+            document.getElementById('btn-export').addEventListener('click', exportCSV);
+
+            document.getElementById('btn-toggle-names').addEventListener('click', openNamesModal);
+            document.getElementById('btn-close-modal').addEventListener('click', closeNamesModal);
+            document.getElementById('btn-save-names').addEventListener('click', saveNames);
+
+            // モーダル外クリックで閉じる
+            document.getElementById('modal-names').addEventListener('click', (e) => {
+                if (e.target.id === 'modal-names') closeNamesModal();
+            });
+        });
+    </script>
+</body>
+</html>
